@@ -155,13 +155,12 @@
                     {% if product.stock < 0 %}
                         <h5 class="text-danger">Out of Stock</h5>
                     {% else %}    
-                        <form method="post" action="{% url 'carts:add-to-cart' product.id %}">
-                         {% csrf_token %}
-                            <button type="submit" class="btn btn-primary">
-                             <span class="text">Add to cart</span>
+                        
+                            <a href="{% url 'store:product_detail' category_slug=product.category.slug product_slug=product.slug %}" type="submit" class="btn btn-primary">
+                             <span class="text">View Detail</span>
                                 <i class="fas fa-shopping-cart"></i>
-                            </button>
-                        </form>
+                            </a>
+                        
                     {% endif %}
                 </figcaption>
             </figure>

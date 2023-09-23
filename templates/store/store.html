@@ -146,7 +146,17 @@
                             <!-- <del class="price-old">$1980</del> -->
                         </div> <!-- price-wrap.// -->
                     </div>
-                    <a href="#" class="btn btn-block btn-primary">Add to cart </a>
+                    {% if product.stock < 0 %}
+                        <h5 class="text-danger">Out of Stock</h5>
+                    {% else %}    
+                        <form method="post" action="{% url 'carts:add-to-cart' product.id %}">
+                         {% csrf_token %}
+                            <button type="submit" class="btn btn-primary">
+                             <span class="text">Add to cart</span>
+                                <i class="fas fa-shopping-cart"></i>
+                            </button>
+                        </form>
+                    {% endif %}
                 </figcaption>
             </figure>
         </div> <!-- col.// -->

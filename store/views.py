@@ -3,6 +3,8 @@ from django.shortcuts import get_object_or_404
 from django.http import Http404
 from store.models import Product
 from category.models import Category
+from carts.models import CartItem
+from carts.views import CartMixin
 
 class StoreView(TemplateView):
     template_name = 'store/store.html'
@@ -25,14 +27,11 @@ class StoreView(TemplateView):
 
         return context
     
+
 class ProductDetailView(TemplateView):
     template_name = 'store/product_detail.html'
 
-    def get_object(self, queryset=None):
-        """
-        Retrieve the product based on category_slug and product_slug.
-        Raises Http404 if the product is not found.
-        """
+    def get_context_data(self, **kwargs):
         # Get the category_slug and product_slug from URL parameters
         category_slug = self.kwargs.get('category_slug')
         product_slug = self.kwargs.get('product_slug')
@@ -40,16 +39,20 @@ class ProductDetailView(TemplateView):
         try:
             # Retrieve the product with the given slugs
             product = Product.objects.get(category__slug=category_slug, slug=product_slug, is_available=True)
+            
+            # Create an instance of CartMixin
+            cart_mixin = CartMixin()
+            # Use the _cart_id method from CartMixin
+            cart_id = cart_mixin._cart_id(self.request)
+            
+            in_cart = CartItem.objects.filter(cart__cart_id=cart_id, product=product).exists()
+
         except Product.DoesNotExist:
             # If the product does not exist, raise a 404 error
             raise Http404("Product not found")
 
-        return product
-
-    def get_context_data(self, **kwargs):
-        # Use the retrieved product in the context
-        product = self.get_object()
         context = {
             'product': product,
+            'in_cart': in_cart,
         }
         return context

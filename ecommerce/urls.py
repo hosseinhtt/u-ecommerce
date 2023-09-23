@@ -24,7 +24,8 @@ from .views import IndexView
 urlpatterns = [
     path("admin/", admin.site.urls),
     path('', IndexView.as_view(), name='index'),
-    path('category/', include('category.urls')),
-    path('accounts/', include('accounts.urls')),
-    path('store/', include('store.urls', namespace='store'))
+    path('category/', include('category.urls', namespace='category')),
+    path('accounts/', include('accounts.urls', namespace='accounts')),
+    path('store/', include('store.urls', namespace='store')),
+    path('cart/', include('carts.urls', namespace='carts')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,10 +1,16 @@
-from django.views.generic import TemplateView, DetailView
+from django.shortcuts import render
+from django.views.generic import View, TemplateView, DetailView
 from django.shortcuts import get_object_or_404
 from django.http import Http404
 from store.models import Product
 from category.models import Category
 from carts.models import CartItem
 from carts.views import CartMixin
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db.models import Q
+from django.db import connection
+
+
 
 class StoreView(TemplateView):
     template_name = 'store/store.html'
@@ -16,13 +22,17 @@ class StoreView(TemplateView):
             category = get_object_or_404(Category, slug=category_slug)
             products = Product.objects.filter(category=category, is_available=True)
         else:
-            products = Product.objects.filter(is_available=True)
+            products = Product.objects.filter(is_available=True).order_by('-created_date')
         
+        paginator = Paginator(products, 3)
+        page = self.request.GET.get('page')
+        paged_products = paginator.get_page(page)
         product_count = products.count()
         
         context = {
             'products': products,
-            'count': product_count,
+            'product_count': product_count,
+            'paged_products': paged_products
         }
 
         return context
@@ -56,3 +66,34 @@ class ProductDetailView(TemplateView):
             'in_cart': in_cart,
         }
         return context
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+class SearchView(View):
+    template_name = 'store/store.html'
+
+    def get(self, request):
+        keyword = request.GET.get('keyword', '')
+
+        if keyword:
+            products = Product.objects.order_by('-created_date').filter(
+                Q(description__icontains=keyword) | Q(product_name__icontains=keyword))
+            
+            product_count = products.count()
+        else:
+            products = []
+            product_count = 0
+
+        paginator = Paginator(products, 3)
+        page = self.request.GET.get('page')
+        paged_products = paginator.get_page(page)
+
+        context = {
+            'products': products,
+            'product_count': product_count,
+            'paged_products': paged_products,
+        }
+        
+        return render(request, self.template_name, context)

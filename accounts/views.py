@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from accounts.forms import RegistrationForm, UserForm, UserProfileForm
 from accounts.models import Account, UserProfile
 from django.contrib import messages, auth
+from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 from django.contrib.sites.shortcuts import get_current_site
@@ -38,27 +39,27 @@ class RegisterView(TemplateView):
             user = Account.objects.create_user(first_name=first_name, last_name=last_name, email=email, username=username, password=password)
             user.phone_number = phone_number
             user.save()
-            messages.success(request, "Registeration Successfully")
-            return redirect('accounts:register')
-            # # Create a user profile
-            # profile = UserProfile()
-            # profile.user_id = user.id
-            # profile.profile_picture = 'default/default-user.png'
-            # profile.save()
+            
+            # Create a user profile
+            profile = UserProfile()
+            profile.user_id = user.id
+            profile.profile_picture = 'default/default-user.png'
+            profile.save()
 
-            # # USER ACTIVATION
-            # current_site = get_current_site(request)
-            # mail_subject = 'Please activate your account'
-            # message = render_to_string('accounts/account_verification_email.html', {
-            #     'user': user,
-            #     'domain': current_site,
-            #     'uid': urlsafe_base64_encode(force_bytes(user.pk)),
-            #     'token': default_token_generator.make_token(user),
-            # })
-            # to_email = email
-            # send_email = EmailMessage(mail_subject, message, to=[to_email])
-            # send_email.send()
-            # return redirect('/accounts/login/?command=verification&email='+email)
+            # USER ACTIVATION
+            current_site = get_current_site(request)
+            mail_subject = 'Please activate your account'
+            message = render_to_string('accounts/account_verification_email.html', {
+                'user': user,
+                'domain': current_site,
+                'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+                'token': default_token_generator.make_token(user),
+            })
+            to_email = email
+            send_email = EmailMessage(mail_subject, message, to=[to_email])
+            send_email.send()
+            messages.success(request, "Registeration Successfully")
+            return redirect('/accounts/login/?command=verification&email='+email)
         context = {'form': form}
         return render(request, 'accounts/register.html', context)
 
@@ -179,19 +180,49 @@ class ResetPasswordView(View):
         return render(request, 'accounts/reset_password.html', {'form': PasswordResetForm()})
 
     def post(self, request):
-        form = PasswordResetForm(request.POST)
-        if form.is_valid():
-            password = form.cleaned_data['password']
-            confirm_password = form.cleaned_data['confirm_password']
+        # form = PasswordResetForm(request.POST)
+        # if form.is_valid():
+        password = request.POST['password']
+        confirm_password = request.POST['confirm_password']
 
-            if password == confirm_password:
-                uid = request.session.get('uid')
-                User = get_user_model()
-                user = User.objects.get(pk=uid)
-                user.set_password(password)
-                user.save()
-                messages.success(request, 'Password reset successful')
-                return redirect('accounts:login')
-            else:
-                messages.error(request, 'Password does not match!')
-        return render(request, 'accounts/rese_password.html', {'form': form})
+        if password == confirm_password:
+            uid = request.session.get('uid')
+            User = get_user_model()
+            user = User.objects.get(pk=uid)
+            user.set_password(password)
+            user.save()
+            messages.success(request, 'Password reset successful')
+            return redirect('accounts:login')
+            # else:
+            #     messages.error(request, 'Password does not match!'
+        
+        return render(request, 'accounts/reset_password.html')
+
+
+    
+class ActivateAccountView(View):
+    def get(self, request, uidb64, token):
+        try:
+            uid = urlsafe_base64_decode(uidb64).decode()
+            user = Account._default_manager.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, Account.DoesNotExist):
+            user = None
+
+        if user is not None and default_token_generator.check_token(user, token):
+            user.is_active = True
+            user.save()
+            messages.success(request, 'Congratulations! Your account is activated.')
+            return redirect('accounts:login')
+        else:
+            messages.error(request, 'Invalid activation link')
+            return redirect('accounts:register')
+        
+
+@method_decorator(login_required, name='dispatch')
+class DashboardView(View):
+    def get(self, request):
+        userprofile = UserProfile.objects.filter(user_id=request.user.id).first()
+        context = {
+            'userprofile': userprofile,
+        }
+        return render(request, 'accounts/dashboard.html', context)

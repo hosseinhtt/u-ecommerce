@@ -9,6 +9,7 @@ urlpatterns = [
     path('remove-cart/<int:product_id>/<int:cart_item_id>/', RemoveCartView.as_view(), name='remove-cart'),
     path('delete-cart/<int:product_id>/<int:cart_item_id>/', RemoveCartItemView.as_view(), name='delete-cart'),
 
+    path('checkout/', CheckoutView.as_view(), name='checkout'),
 ]
 
 # Define a router for the CartItemViewSet

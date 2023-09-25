@@ -4,6 +4,7 @@ from .models import Cart, CartItem
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.decorators import login_required
 from django.views import View
+from django.utils.decorators import method_decorator
 from django.http import HttpResponse
 
 
@@ -43,7 +44,7 @@ class CartView(View, CartMixin):
         return render(request, 'store/cart.html', context)
 
 class CheckoutView(View, CartMixin):
-    @login_required(login_url='login')
+    @method_decorator(login_required(login_url='accounts:login'))
     def get(self, request, total=0, quantity=0, cart_items=None):
         try:
             tax = 0
@@ -69,7 +70,6 @@ class CheckoutView(View, CartMixin):
             'grand_total': grand_total,
         }
         return render(request, 'store/checkout.html', context)
-
 class AddToCartView(View, CartMixin):
     def post(self, request, product_id):
         current_user = request.user

@@ -1,4 +1,3 @@
-from rest_framework import generics, filters, status
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from store.models import Product, Variation
@@ -6,10 +5,12 @@ from category.models import Category
 from carts.models import CartItem, Cart
 from carts.views import CartMixin
 from api.serializers import ProductSerializer, CartItemSerializer
+from api.forms import AddToCartForm
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 
+from rest_framework import viewsets, status, generics, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.authentication import SessionAuthentication
@@ -96,7 +97,6 @@ class CheckoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-
         user = request.user
         if user:
             refresh = RefreshToken.for_user(user)
@@ -104,70 +104,93 @@ class CheckoutView(APIView):
 
             cart_items = CartItem.objects.filter(user=user, is_active=True)
             total = sum(item.product.price * item.quantity for item in cart_items)
+            tax = 2*total/100
+            final = tax+total
+            serializer = CartItemSerializer(cart_items, many=True)
+
             response_data = {
-                'cart_items': CartItemSerializer(cart_items, many=True).data,
+                'cart_items': serializer.data,
                 'total': total,
+                'tax': tax,
+                'total_price': final,
                 'access_token': access_token
             }
             return Response(response_data, status=status.HTTP_200_OK)
         else:
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-    
 
-class AddToCartView(APIView, CartMixin):
-    def post(self, request, product_id):
-        current_user = request.user
-        product = Product.objects.get(id=product_id)
 
-        product_variation = []
-        if request.method == 'POST':
-            for item in request.POST:
-                key = item
-                value = request.POST[key]
+class AddToCartView(viewsets.ModelViewSet):
+    serializer_class = CartItemSerializer
+    queryset = CartItem.objects.all()
 
-                try:
-                    variation = Variation.objects.get(product=product, variation_category__iexact=key,
-                                                     variation_value__iexact=value)
-                    product_variation.append(variation)
-                except:
-                    pass
+    def create(self, request, *args, **kwargs):
+        # Retrieve the product based on the product_id
+        product = get_object_or_404(Product, id=kwargs.get('product_id'))
 
-        is_cart_item_exists = CartItem.objects.filter(product=product, user=current_user).exists()
-        if is_cart_item_exists:
-            cart_item = CartItem.objects.filter(product=product, user=current_user)
-            ex_var_list = []
-            id = []
-            for item in cart_item:
-                existing_variation = item.variations.all()
-                ex_var_list.append(list(existing_variation))
-                id.append(item.id)
+        # Get the JSON data from the request body
+        data = request.data
 
-            if product_variation in ex_var_list:
-                # increase the cart item quantity
-                index = ex_var_list.index(product_variation)
-                item_id = id[index]
-                item = CartItem.objects.get(product=product, id=item_id)
-                item.quantity += 1
-                item.save()
+        # Assuming the JSON data includes 'variations' as a list of variation IDs
+        variation_ids = data.get('variations', [])
 
-            else:
-                item = CartItem.objects.create(product=product, quantity=1, user=current_user)
-                if len(product_variation) > 0:
-                    item.variations.clear()
-                    item.variations.add(*product_variation)
-                item.save()
+        # Create or get the user's cart based on their authentication status
+        if request.user.is_authenticated:
+            cart, _ = Cart.objects.get_or_create(user=request.user)
         else:
-            cart_item = CartItem.objects.create(
-                product=product,
-                quantity=1,
-                user=current_user,
-            )
-            if len(product_variation) > 0:
-                cart_item.variations.clear()
-                cart_item.variations.add(*product_variation)
-            cart_item.save()
-        return Response({'detail': 'Product added to cart successfully'}, status=status.HTTP_201_CREATED)
+            cart_id = request.session.get('cart_id')
+            if cart_id:
+                cart = get_object_or_404(Cart, id=cart_id)
+            else:
+                cart = Cart.objects.create()
 
+        # Create or update the cart item
+        cart_item, created = CartItem.objects.get_or_create(
+            cart=cart,
+            product=product,
+            user=request.user if request.user.is_authenticated else None,
+        )
+
+        # Add the selected variations to the cart item
+        if variation_ids:
+            variations = Variation.objects.filter(id__in=variation_ids)
+            cart_item.variations.set(variations)
+
+        # Update the quantity based on the request data
+        quantity = data.get('quantity', 1)
+        cart_item.quantity = quantity
+        cart_item.save()
+
+        # Serialize the cart item for response
+        cart_item_serializer = CartItemSerializer(cart_item)
+
+        return Response({'detail': 'Product added to cart successfully', 'cart_item': cart_item_serializer.data}, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        # Retrieve the cart item based on the item_id
+        item_id = kwargs.get('pk')
+        cart_item = get_object_or_404(CartItem, id=item_id)
+
+        # Update the quantity based on the request data
+        quantity = request.data.get('quantity')
+        if quantity is not None:
+            cart_item.quantity = quantity
+            cart_item.save()
+
+        # Serialize the updated cart item for response
+        cart_item_serializer = CartItemSerializer(cart_item)
+
+        return Response({'detail': 'Cart item updated successfully', 'cart_item': cart_item_serializer.data})
+
+    def destroy(self, request, *args, **kwargs):
+        # Retrieve the cart item based on the item_id
+        item_id = kwargs.get('pk')
+        cart_item = get_object_or_404(CartItem, id=item_id)
+
+        # Delete the cart item
+        cart_item.delete()
+
+        return Response({'detail': 'Cart item deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
 class RemoveCartView(APIView):
     def get(self, request, product_id, cart_item_id):
         product = get_object_or_404(Product, id=product_id)
@@ -179,31 +202,34 @@ class RemoveCartView(APIView):
                 cart_id = cart_mixin._cart_id(request)
                 cart = Cart.objects.get(cart_id=cart_id)
                 cart_item = CartItem.objects.get(product=product, cart=cart, id=cart_item_id)
+
             if cart_item.quantity > 1:
                 cart_item.quantity -= 1
                 cart_item.save()
             else:
                 cart_item.delete()
-        except:
+        except ObjectDoesNotExist:
             pass
+
         return Response({'detail': 'Product quantity decreased'}, status=status.HTTP_200_OK)
 
 class RemoveCartItemView(APIView):
     def get(self, request, product_id, cart_item_id):
         product = get_object_or_404(Product, id=product_id)
-        if request.user.is_authenticated:
-            cart_item = CartItem.objects.get(product=product, user=request.user, id=cart_item_id)
-        else:
-            cart_mixin = CartMixin()
-            cart_id = cart_mixin._cart_id(request)
-            cart = Cart.objects.get(cart_id=cart_id)
-            cart_item = CartItem.objects.get(product=product, cart=cart, id=cart_item_id)
-        cart_item.delete()
+        try:
+            if request.user.is_authenticated:
+                cart_item = CartItem.objects.get(product=product, user=request.user, id=cart_item_id)
+            else:
+                cart_mixin = CartMixin()
+                cart_id = cart_mixin._cart_id(request)
+                cart = Cart.objects.get(cart_id=cart_id)
+                cart_item = CartItem.objects.get(product=product, cart=cart, id=cart_item_id)
+
+            cart_item.delete()
+        except ObjectDoesNotExist:
+            pass
+
         return Response({'detail': 'Product removed from cart'}, status=status.HTTP_204_NO_CONTENT)
-
-
-
-
 
 
 

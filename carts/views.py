@@ -69,6 +69,7 @@ class CheckoutView(View, CartMixin):
             'grand_total': grand_total,
         }
         return render(request, 'store/checkout.html', context)
+    
 class AddToCartView(View, CartMixin):
     def post(self, request, product_id):
         current_user = request.user

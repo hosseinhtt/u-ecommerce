@@ -45,6 +45,9 @@ INSTALLED_APPS = [
     'djoser',                      # For User registration and authentication (optional)
     'drf_yasg',                    # For Swagger documentation (optional)
     'rest_framework_simplejwt',    # For JWT authentication
+    'rest_framework_swagger',
+    'drf_spectacular',
+
 
     'category',
     'accounts',
@@ -58,6 +61,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         # Other authentication classes if needed
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 SIMPLE_JWT = {

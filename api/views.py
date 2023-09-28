@@ -4,7 +4,7 @@ from store.models import Product, Variation
 from category.models import Category
 from carts.models import CartItem, Cart
 from carts.views import CartMixin
-from api.serializers import ProductSerializer, CartItemSerializer
+from api.serializers import ProductSerializer, CartItemSerializer, OrderSerializer, PaymentSerializer
 from api.forms import AddToCartForm
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.decorators import login_required
@@ -18,6 +18,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import authentication_classes, permission_classes
 
 from rest_framework_simplejwt.tokens import RefreshToken # for using the login views
+
+import uuid
 
 ######################### STORE ###########################
 class StoreView(generics.ListAPIView):
@@ -231,6 +233,183 @@ class RemoveCartItemView(APIView):
 
         return Response({'detail': 'Product removed from cart'}, status=status.HTTP_204_NO_CONTENT)
 
+from rest_framework import status
+from django.http import JsonResponse
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.shortcuts import redirect, render
+from django.core.mail import EmailMessage
+from django.template.loader import render_to_string
+from django.contrib.auth.decorators import login_required
+from carts.models import CartItem
+from order.forms import OrderForm
+from order.models import Order, Payment, OrderProduct
+from store.models import Product
+from accounts.models import Account
+import datetime
+import json
+
+class Payments(APIView):
+    def post(self, request):
+        body = json.loads(request.body)
+        order = Order.objects.get(user=request.user, is_ordered=False, order_number=body['orderID'])
+
+        payment = Payment(
+            user=request.user,
+            payment_id=body['transID'],
+            payment_method=body['payment_method'],
+            amount_paid=order.order_total,
+            status=body['status'],
+        )
+        payment.save()
+
+        order.payment = payment
+        order.is_ordered = True
+        order.save()
+
+        cart_items = CartItem.objects.filter(user=request.user)
+
+        for item in cart_items:
+            orderproduct = OrderProduct()
+            orderproduct.order = order
+            orderproduct.payment = payment
+            orderproduct.user = request.user
+            orderproduct.product = item.product
+            orderproduct.quantity = item.quantity
+            orderproduct.product_price = item.product.price
+            orderproduct.ordered = True
+            orderproduct.save()
+
+            cart_item = CartItem.objects.get(id=item.id)
+            product_variation = cart_item.variations.all()
+            orderproduct.variations.set(product_variation)
+            orderproduct.save()
+
+            product = Product.objects.get(id=item.product_id)
+            product.stock -= item.quantity
+            product.save()
+
+        CartItem.objects.filter(user=request.user).delete()
+
+        mail_subject = 'Thank you for your order!'
+        message = render_to_string('orders/order_recieved_email.html', {
+            'user': request.user,
+            'order': order,
+        })
+        to_email = request.user.email
+        send_email = EmailMessage(mail_subject, message, to=[to_email])
+        send_email.send()
+
+        data = {
+            'order_number': order.order_number,
+            'transID': payment.payment_id,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+class PlaceOrder(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        current_user = request.user
+        cart_items = CartItem.objects.filter(user=current_user)
+        cart_count = cart_items.count()
+
+        if cart_count <= 0:
+            return Response({'error': 'Your cart is empty.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        grand_total = 0
+        tax = 0
+        for cart_item in cart_items:
+            grand_total += (cart_item.product.price * cart_item.quantity)
+        tax = (2 * grand_total) / 100
+
+        yr = int(datetime.date.today().strftime('%Y'))
+        dt = int(datetime.date.today().strftime('%d'))
+        mt = int(datetime.date.today().strftime('%m'))
+        d = datetime.date(yr, mt, dt)
+        current_date = d.strftime("%Y%m%d")
+        order_number = current_date + str(uuid.uuid4().int)[:6]
+
+        form = OrderForm(request.POST)
+        
+        if form.is_valid():
+            order_data = {
+                'user': current_user.id,
+                'order_total': grand_total + tax,
+                'tax': tax,
+                'order_number': order_number,  # You can generate a unique order number
+                'first_name': form.cleaned_data['first_name'],
+                'last_name': form.cleaned_data['last_name'],
+                'phone': form.cleaned_data['phone'],
+                'email': form.cleaned_data['email'],
+                'address_line_1': form.cleaned_data['address_line_1'],
+                'address_line_2': form.cleaned_data['address_line_2'],
+                'country': form.cleaned_data['country'],
+                'state': form.cleaned_data['state'],
+                'city': form.cleaned_data['city'],
+                'order_note': form.cleaned_data['order_note'],
+                'status': 'New',  # You can set the initial status
+                'ip': request.META.get('REMOTE_ADDR'),
+                'is_ordered': False,  # The order is initially not ordered
+            }
+            order_serializer = OrderSerializer(data=order_data)
+
+        else:
+            return JsonResponse(form.errors)
+        
+
+        if order_serializer.is_valid():
+            order = order_serializer.save()
+
+            # You can add Payment logic here if needed
+            payment_data = {
+                'user': current_user.id,
+                'payment_id': 'your_payment_id_here',
+                'payment_method': 'your_payment_method_here',
+                'amount_paid': grand_total + tax,
+                'status': 'your_payment_status_here',
+            }
+            payment_serializer = PaymentSerializer(data=payment_data)
+            if payment_serializer.is_valid():
+                payment = payment_serializer.save()
+                order.payment = payment
+                order.save()
+
+            response_data = {
+                'message': 'Order placed successfully',
+                'order': order_serializer.data,
+            }
+            return Response(response_data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(order_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class OrderCompleteView(APIView):
+    def get(self, request):
+        order_number = request.GET.get('order_number')
+        transID = request.GET.get('payment_id')
+
+        try:
+            order = Order.objects.get(order_number=order_number, is_ordered=True)
+            ordered_products = OrderProduct.objects.filter(order=order)
+
+            subtotal = 0
+            for ordered_product in ordered_products:
+                subtotal += ordered_product.product_price * ordered_product.quantity
+
+            payment = Payment.objects.get(payment_id=transID)
+
+            context = {
+                'order': order,
+                'ordered_products': ordered_products,
+                'order_number': order.order_number,
+                'transID': payment.payment_id,
+                'payment': payment,
+                'subtotal': subtotal,
+            }
+            return render(request, 'orders/order_complete.html', context)
+        except (Payment.DoesNotExist, Order.DoesNotExist):
+            return redirect('home')
 
 
 

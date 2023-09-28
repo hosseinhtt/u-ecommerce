@@ -35,14 +35,17 @@ urlpatterns = [
     path('store/', include('store.urls', namespace='store')),
     path('cart/', include('carts.urls', namespace='carts')),
     path('api/', include('api.urls', namespace='api')),
-
+    path('order/', include('order.urls', namespace='order')),
+    
     # JWT authentication views
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    path('auth/', include('djoser.urls')),  # Djoser authentication URLs
+    # Djoser authentication URLs
+    path('auth/', include('djoser.urls')),  
     path('auth/', include('djoser.urls.authtoken')),
-
+    
+    # SWAGGER with drf_spectacular
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),

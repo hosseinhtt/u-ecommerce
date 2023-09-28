@@ -2,6 +2,7 @@
 from rest_framework import serializers
 from store.models import Product, Variation
 from carts.models import CartItem
+from order.models import Payment, Order, OrderProduct
 
 
 class VariationSerializer(serializers.ModelSerializer):
@@ -22,6 +23,24 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = '__all__'
 
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = '__all__'
+
+class OrderProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderProduct
+        fields = '__all__'
+
+class OrderSerializer(serializers.ModelSerializer):
+    order_products = OrderProductSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Order
+        fields = '__all__'
 
 
 

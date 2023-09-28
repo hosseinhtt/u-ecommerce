@@ -22,6 +22,9 @@ urlpatterns=[
 
     path('', include(router.urls)),
 
+    path('payments/', Payments.as_view(), name='payments'),
+    path('place-order/', PlaceOrder.as_view(), name='place-order'),
+    path('order-complete/', OrderCompleteView.as_view(), name='order-complete'),
 
 
 

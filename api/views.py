@@ -1,14 +1,25 @@
+import uuid
+import datetime
+import json
+
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.core.mail import EmailMessage
+from django.template.loader import render_to_string
+from django.core.exceptions import ObjectDoesNotExist
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
+
 from store.models import Product, Variation
 from category.models import Category
 from carts.models import CartItem, Cart
 from carts.views import CartMixin
+from order.forms import OrderForm
+from order.models import Order, Payment, OrderProduct
 from api.serializers import ProductSerializer, CartItemSerializer, OrderSerializer, PaymentSerializer
 from api.forms import AddToCartForm
-from django.core.exceptions import ObjectDoesNotExist
-from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
 
 from rest_framework import viewsets, status, generics, filters
 from rest_framework.views import APIView
@@ -19,7 +30,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 
 from rest_framework_simplejwt.tokens import RefreshToken # for using the login views
 
-import uuid
+
 
 ######################### STORE ###########################
 class StoreView(generics.ListAPIView):
@@ -233,21 +244,7 @@ class RemoveCartItemView(APIView):
 
         return Response({'detail': 'Product removed from cart'}, status=status.HTTP_204_NO_CONTENT)
 
-from rest_framework import status
-from django.http import JsonResponse
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.shortcuts import redirect, render
-from django.core.mail import EmailMessage
-from django.template.loader import render_to_string
-from django.contrib.auth.decorators import login_required
-from carts.models import CartItem
-from order.forms import OrderForm
-from order.models import Order, Payment, OrderProduct
-from store.models import Product
-from accounts.models import Account
-import datetime
-import json
+
 
 class Payments(APIView):
     def post(self, request):

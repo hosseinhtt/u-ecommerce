@@ -13,4 +13,8 @@ urlpatterns = [
     path('reset-password/', ResetPasswordView.as_view(), name='reset-password'),
     path('activate/<uidb64>/<token>/', ActivateAccountView.as_view(), name='activate'),
 
+    path('my_orders/',MyOrdersView.as_view(), name='my_orders'),
+    path('edit_profile/', EditProfileView.as_view(), name='edit_profile'),
+    path('change_password/', ChangePasswordView.as_view(), name='change_password'),
+    path('order_detail/<int:order_id>/', OrderDetailView.as_view(), name='order_detail'),
 ]

@@ -23,15 +23,19 @@
 					<div class="card-body">
 						<h5 class="card-title">Total Orders</h5>
 						<h4>{{orders_count}}</h4>
-						<a href="">View Orders</a>
+						<a href="{% url 'accounts:my_orders' %}">View Orders</a>
 					</div>
 				</div>
 			</div>
 			<div class="col-md-6">
 				<div class="card" style="text-align:center;">
 					<div class="card-body">
-						<img src="{{userprofile.profile_picture.url}}" alt="User Profile Picture" width="50" height="50" style="border-radius:50%;">
-						<p class="mb-0">{{user.email}}</p>
+						{% if userprofile.profile_picture %}
+							<img src="{{userprofile.profile_picture.url}}" alt="User Profile Picture" width="50" height="50" style="border-radius:50%;">
+						{% else %}
+							<img src="https://www.w3schools.com/howto/img_avatar.png" alt="Unknown Profile Picture" width="50" height="50" style="border-radius:50%;">
+						{% endif %}
+							<p class="mb-0">{{user.email}}</p>
 						<p>{{user.phone_number}}</p>
 					</div>
 				</div>

@@ -13,6 +13,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import EmailMessage
 from carts.views import CartMixin
 from carts.models import Cart, CartItem
+from order.models import Order, OrderProduct
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordResetForm
 import requests
@@ -218,11 +219,106 @@ class ActivateAccountView(View):
             return redirect('accounts:register')
         
 
-@method_decorator(login_required, name='dispatch')
 class DashboardView(View):
+    @method_decorator(login_required(login_url='accounts:login'))
     def get(self, request):
-        userprofile = UserProfile.objects.filter(user_id=request.user.id).first()
+        try:
+            userprofile = UserProfile.objects.get(user=request.user)
+        except UserProfile.DoesNotExist:
+            userprofile = None
+
+        orders = Order.objects.order_by('-created_at').filter(user=request.user, is_ordered=True)
+        orders_count = orders.count()
+        
         context = {
+            'orders_count': orders_count,
             'userprofile': userprofile,
         }
         return render(request, 'accounts/dashboard.html', context)
+    
+class MyOrdersView(View):
+    @method_decorator(login_required(login_url='login'))
+    def get(self, request):
+        orders = Order.objects.filter(user=request.user, is_ordered=True).order_by('-created_at')
+        context = {
+            'orders': orders,
+        }
+        return render(request, 'accounts/my_orders.html', context)
+
+class EditProfileView(View):
+    @method_decorator(login_required(login_url='accounts:login'))
+    def get(self, request):
+        userprofile = get_object_or_404(UserProfile, user=request.user)
+        user_form = UserForm(instance=request.user)
+        profile_form = UserProfileForm(instance=userprofile)
+        context = {
+            'user_form': user_form,
+            'profile_form': profile_form,
+            'userprofile': userprofile,
+        }
+        return render(request, 'accounts/edit_profile.html', context)
+
+    def post(self, request):
+        userprofile = get_object_or_404(UserProfile, user=request.user)
+        user_form = UserForm(request.POST, instance=request.user)
+        profile_form = UserProfileForm(request.POST, request.FILES, instance=userprofile)
+        if user_form.is_valid() and profile_form.is_valid():
+            user_form.save()
+            profile_form.save()
+            messages.success(request, 'Your profile has been updated.')
+            return redirect('accounts:edit_profile')
+        else:
+            messages.error(request, 'There was an error updating your profile.')
+            return redirect('accounts:edit_profile')
+
+@method_decorator(login_required(login_url='login'), name='dispatch')
+class ChangePasswordView(View):
+    template_name = 'accounts/change_password.html'
+
+    def get(self, request):
+        return render(request, self.template_name)
+
+    def post(self, request):
+        current_password = request.POST.get('current_password')
+        new_password = request.POST.get('new_password')
+        confirm_password = request.POST.get('confirm_password')
+
+        user = request.user
+
+        if new_password == confirm_password:
+            success = user.check_password(current_password)
+            if success:
+                user.set_password(new_password)
+                user.save()
+                messages.success(request, 'Password updated successfully.')
+                return redirect('accounts:login')
+            else:
+                messages.error(request, 'Please enter a valid current password')
+                return render(request, self.template_name)
+        else:
+            messages.error(request, 'Passwords do not match!')
+            return render(request, self.template_name)
+
+@method_decorator(login_required(login_url='login'), name='dispatch')
+class OrderDetailView(View):
+    template_name = 'accounts/order_detail.html'
+
+    def get(self, request, order_id):
+        try:
+            order_detail = OrderProduct.objects.filter(order__order_number=order_id)
+            order = Order.objects.get(order_number=order_id)
+            subtotal = sum(item.product_price * item.quantity for item in order_detail)
+
+            print(order_detail)
+            print(order)
+            print(subtotal)
+            context = {
+                'order_detail': order_detail,
+                'order': order,
+                'subtotal': subtotal,
+            }
+
+            return render(request, self.template_name, context)
+        except Order.DoesNotExist:
+            # Handle the case where the order doesn't exist
+            return render(request, 'accounts/order_not_found.html')

@@ -8,7 +8,7 @@ from django.db import connection
 from django.contrib import messages
 from django.http import HttpResponseRedirect
 
-from store.models import Product, ReviewRating
+from store.models import Product, ReviewRating, ProductGallery
 from store.forms import ReviewForm
 from category.models import Category
 from carts.models import CartItem
@@ -77,11 +77,14 @@ class ProductDetailView(TemplateView):
 
         reviews = ReviewRating.objects.filter(product_id=product.id, status=True)
 
+        product_gallery = ProductGallery.objects.filter(product_id=product.id)
+
         context = {
             'product': product,
             'in_cart': in_cart,
             'reviews': reviews,
             'order_product': orderproduct,
+            'product_gallery': product_gallery,
 
         }
         return context

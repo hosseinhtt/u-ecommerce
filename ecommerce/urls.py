@@ -28,7 +28,8 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path('admin/', include('admin_honeypot.urls', namespace='admin_honeypot')),
+    path("securelogin/", admin.site.urls),
     path('', IndexView.as_view(), name='index'),
     path('category/', include('category.urls', namespace='category')),
     path('accounts/', include('accounts.urls', namespace='accounts')),

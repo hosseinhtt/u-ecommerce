@@ -42,11 +42,11 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     'rest_framework',
-    'djoser',                      # For User registration and authentication (optional)
-    'drf_yasg',                    # For Swagger documentation (optional)
-    'rest_framework_simplejwt',    # For JWT authentication
-    'rest_framework_swagger',
-    'drf_spectacular',
+    # 'djoser',                      # For User registration and authentication (optional)
+    # 'drf_yasg',                    # For Swagger documentation (optional)
+    # 'rest_framework_simplejwt',    # For JWT authentication
+    # 'rest_framework_swagger',
+    # 'drf_spectacular',
     'admin_honeypot',
 
 
